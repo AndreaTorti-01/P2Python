@@ -1,37 +1,9 @@
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
 import urllib.request
 import tkinter as tk
-import socket
-from threading import Thread
 
-def connectF_t():
-    t = Thread(target=connectF)
-    t.daemon = True
-    t.start()
-def connectF():
-    addr = friendip.get().split(":")
-    port = int(addr[1])
-    connectSocket.connect((addr[0], port))
-    print("connected!")
+from Backend import *
 
-def acceptF_t():
-    t = Thread(target=acceptF)
-    t.daemon = True
-    t.start()
-    print("server ready!")
-def acceptF():
-    _, addr = acceptSocket.accept()
-    print(addr, "connected")
-
-HOST = "0.0.0.0"
-acceptSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-connectSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-acceptSocket.bind((HOST, 0))
-acceptSocket.listen()
-acceptF_t()
+acceptSocket, connectSocket = createSockets()
 
 palette = {
     "bg": "#4a4d4d",
@@ -42,34 +14,6 @@ palette = {
 
 external_ip = urllib.request.urlopen(
     'https://v4.ident.me/').read().decode('utf8')
-
-private_key = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=2048,
-    backend=default_backend()
-)
-public_key = private_key.public_key()
-
-# b for bytes, each char max 8 lenght
-message = b'encrypt me!'
-
-encrypted = public_key.encrypt(
-    message,
-    padding.OAEP(
-        mgf=padding.MGF1(algorithm=hashes.SHA256()),
-        algorithm=hashes.SHA256(),
-        label=None
-    )
-)
-
-original_message = private_key.decrypt(
-    encrypted,
-    padding.OAEP(
-        mgf=padding.MGF1(algorithm=hashes.SHA256()),
-        algorithm=hashes.SHA256(),
-        label=None
-    )
-)
 
 window = tk.Tk()
 frame1 = tk.Frame(
@@ -119,7 +63,7 @@ connect = tk.Button(
     fg=palette["fg"],
     activebackground=palette["activebackground"],
     activeforeground=palette["activeforeground"],
-    command=connectF_t
+    command=lambda: connectF_t(friendip.get(), connectSocket)
 )
 
 ip.pack()
