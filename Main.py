@@ -21,7 +21,6 @@ HOST = "0.0.0.0"
 PORT = 21763
 
 public_key_b: bytes = public_key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
-print(sys.getsizeof(public_key_b))
 
 UPnPt = forwardPort(PORT, PORT, None, None, False, 'TCP', 0, 'P2Python UPnP', False)
 if UPnPt == False:
@@ -69,6 +68,7 @@ def acceptF_t():
         label=None
         )
     )
+    print(sys.getsizeof(public_key_b_enc))
     connectSocket.sendall(public_key_b_enc)
     print("keys exchanged!")
     print(public_key, otherPublic)
