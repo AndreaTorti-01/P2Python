@@ -1,3 +1,4 @@
+import sys
 import tkinter as tk
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
@@ -14,11 +15,30 @@ PALETTE = {
     "activeforeground": "#ffffff"
 }
 
+
+class TextRedirector:
+    def __init__(self, widget, tag="stdout"):
+        self.widget = widget
+        self.tag = tag
+
+    def write(self, text):
+        self.widget.configure(state="normal")
+        self.widget.insert("end", text, (self.tag,))
+        self.widget.configure(state="disabled")
+        self.widget.see("end")  # scroll to the end
+
+    def flush(self):  # needed for file like object
+        pass
+
+def send_message(msg: str):
+    connectSocket.sendall(fernet.encrypt(msg.encode()))
+
 def recv_message():
-    print("started")
     while True:
-        data = connectSocket.recv(4096)
+        data_e = connectSocket.recv(4096)
+        data = fernet.decrypt(data_e)
         print("received", data.decode())
+
 
 def connectF(friendip_s: str):
     t = Thread(target=lambda: connectF_t(friendip_s))
@@ -54,9 +74,22 @@ def connectF_t(friendip_s: str):
     t.start()
 
 
-
 window = tk.Tk()
+
+text = tk.Text(
+    window,
+    font="Consolas 14",
+    bg=PALETTE["bg"],
+    fg=PALETTE["fg"],
+)
+sys.stdout = TextRedirector(text, "stdout")
+
+print("Welcome to P2Python!")
 frame1 = tk.Frame(
+    window,
+    bg=PALETTE["bg"]
+)
+frame2 = tk.Frame(
     window,
     bg=PALETTE["bg"]
 )
@@ -109,8 +142,36 @@ connect = tk.Button(
     command=lambda: connectF(friendip.get())
 )
 
+message = tk.StringVar(window)
+textInput = tk.Entry(
+    frame2,
+    bg=PALETTE["bg"],
+    fg=PALETTE["fg"],
+    font="Consolas 14",
+    width=15,
+    textvariable=message
+)
+
+sendText = tk.Button(
+    frame2,
+    text="Send!",
+    font="Consolas 14",
+    bg=PALETTE["bg"],
+    fg=PALETTE["fg"],
+    activebackground=PALETTE["activebackground"],
+    activeforeground=PALETTE["activeforeground"],
+    command=lambda: send_message(message.get())
+)
+
 
 friend.pack(side='left')
 connect.pack(side='left')
 frame1.pack()
+
+textInput.pack(side='left')
+sendText.pack(side='left')
+frame2.pack()
+
+text.pack()
+
 window.mainloop()
