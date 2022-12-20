@@ -28,7 +28,7 @@ PyInstaller.__main__.run([
     '--onefile',
     '--noconsole'
 ])
-shutil.move(Path("dist/Server.exe"), "Client.exe")
+shutil.move(Path("dist/Server.exe"), "Server.exe")
 os.remove("Server.spec")
 
 try:
