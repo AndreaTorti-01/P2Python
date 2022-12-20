@@ -4,13 +4,12 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from threading import Thread
 import socket
-import sys
+from cryptography.fernet import Fernet
 from portforwardlib import forwardPort
-import urllib.request
+import requests
 
 HOST = "0.0.0.0"
 PORT = 21763
-CHUNK_SIZE = 64
 PALETTE = {
     "bg": "#4a4d4d",
     "fg": "#ffffff",
@@ -18,82 +17,30 @@ PALETTE = {
     "activeforeground": "#ffffff"
 }
 
-
-def data_chunkize_crypt_send(data: bytes, key: rsa.RSAPublicKey, sock_v: socket.socket):
-    # Divide the message into chunks
-    # Change this value to the desired chunk size
-    chunks = [data[i:i + CHUNK_SIZE] for i in range(0, len(data), CHUNK_SIZE)]
-
-    # Encrypt each chunk
-    encrypted_chunks = []
-    for chunk in chunks:
-        encrypted_chunks.append(
-            key.encrypt(
-                chunk,
-                padding.PKCS1v15()
-            )
-        )
-
-    # Concatenate the encrypted chunks
-    encrypted_message = b''.join(encrypted_chunks)
-    # and SEND
-    sock_v.sendall(f"{len(chunks)}:".encode() + encrypted_message)
-
-
-def receive_decrypt_reassemble_output(key: rsa.RSAPrivateKey, sock_v: socket.socket) -> bytes:
-    data = b''
-    while True:
-        # Attempt to receive 4096 bytes of data
-        data_p = sock_v.recv(4096)
-        # If the received data is empty, there is nothing left to receive
-        if not data_p:
-            break
-        # Add the received data to the buffer
-        data += data_p
-    num_chunks = int(data[:data.index(b':')].decode())
-    data = data[data.index(b':'):]
-
-    # Divide the encrypted message into chunks
-    encrypted_chunks = [data[i:i + CHUNK_SIZE]
-                        for i in range(num_chunks * CHUNK_SIZE, len(data), CHUNK_SIZE)]
-
-    # Decrypt each chunk
-    decrypted_chunks = []
-    for chunk in encrypted_chunks:
-        decrypted_chunks.append(
-            key.decrypt(
-                chunk,
-                padding.PKCS1v15()
-            )
-        )
-
-    # Concatenate the decrypted chunks
-    return (b''.join(decrypted_chunks))
-
-
 def acceptF_t():
-    connectSocket, addr = mySocket.accept()
+    global connectSocket
+    # wait for connection
+    connectSocket, addr = acceptSocket.accept()
     print(addr, "connected")
+
+    # receive public key and deserialize it
     otherPublic_b: bytes = connectSocket.recv(4096)
     otherPublic: rsa.RSAPublicKey = serialization.load_pem_public_key(
         otherPublic_b)  # type:ignore
 
-    data_chunkize_crypt_send(public_key_b, otherPublic, connectSocket)
-
+    # encrypt symmetric key and send it
+    symmetric_key_encr = otherPublic.encrypt(
+        symmetric_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    connectSocket.sendall(symmetric_key_encr)
     print("keys exchanged!")
-    print(public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo),
-          otherPublic.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo))
 
-
-private_key = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=2048,
-    backend=default_backend()
-)
-public_key = private_key.public_key()
-public_key_b: bytes = public_key.public_bytes(
-    serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
-otherPublic = rsa.RSAPublicKey
+symmetric_key = Fernet.generate_key()
 
 UPnPt = forwardPort(PORT, PORT, None, None, False,
                     'TCP', 0, 'P2Python UPnP', False)
@@ -101,17 +48,17 @@ if UPnPt == False:
     print('TCP port forwarding failed')
 print('ports opened successfully')
 
-mySocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-mySocket.bind((HOST, PORT))
-mySocket.listen()
+acceptSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+acceptSocket.bind((HOST, PORT))
+acceptSocket.listen()
 connectSocket = socket.socket
 t = Thread(target=lambda: acceptF_t())
 t.daemon = True
 t.start()
 print("server ready!")
 
-external_ip = urllib.request.urlopen(
-    'https://v4.ident.me/').read().decode('utf8')
+external_ip = requests.get(
+    'https://v4.ident.me/').text
 
 window = tk.Tk()
 frame1 = tk.Frame(
@@ -140,10 +87,34 @@ ip = tk.Label(
     bg=PALETTE["bg"],
     fg=PALETTE["fg"],
     font="Consolas 14",
-    text=f"Your Socket-> {external_ip}:{mySocket.getsockname()[1]}"
+    text=f"Your Ip : {external_ip}"
+)
+
+message = tk.StringVar(window)
+textInput = tk.Entry(
+    frame1,
+    bg=PALETTE["bg"],
+    fg=PALETTE["fg"],
+    font="Consolas 14",
+    width=15,
+    textvariable=message
+)
+
+sendText = tk.Button(
+    frame1,
+    text="Send!",
+    font="Consolas 14",
+    bg=PALETTE["bg"],
+    fg=PALETTE["fg"],
+    activebackground=PALETTE["activebackground"],
+    activeforeground=PALETTE["activeforeground"],
+    command=lambda: connectSocket.sendall(message.get().encode()) # type: ignore
 )
 
 ip.pack()
+textInput.pack(side='left')
+sendText.pack(side='left')
+frame1.pack()
 
 window.mainloop()
 

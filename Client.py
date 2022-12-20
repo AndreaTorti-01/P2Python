@@ -1,15 +1,12 @@
-# error line 63
 import tkinter as tk
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from threading import Thread
 import socket
-import sys
+from cryptography.fernet import Fernet
 
-HOST = "0.0.0.0"
 PORT = 21763
-CHUNK_SIZE = 64
 PALETTE = {
     "bg": "#4a4d4d",
     "fg": "#ffffff",
@@ -17,58 +14,11 @@ PALETTE = {
     "activeforeground": "#ffffff"
 }
 
-
-def data_chunkize_crypt_send(data: bytes, key: rsa.RSAPublicKey, sock_v: socket.socket):
-    # Divide the message into chunks
-    # Change this value to the desired chunk size
-    chunks = [data[i:i + CHUNK_SIZE] for i in range(0, len(data), CHUNK_SIZE)]
-
-    # Encrypt each chunk
-    encrypted_chunks = []
-    for chunk in chunks:
-        encrypted_chunks.append(
-            key.encrypt(
-                chunk,
-                padding.PKCS1v15()
-            )
-        )
-
-    # Concatenate the encrypted chunks
-    encrypted_message = b''.join(encrypted_chunks)
-    # and SEND
-    sock_v.sendall(f"{len(chunks)}:".encode() + encrypted_message)
-
-
-def receive_decrypt_reassemble_output(key: rsa.RSAPrivateKey, sock_v: socket.socket) -> bytes:
-    data = b''
+def recv_message():
+    print("started")
     while True:
-        # Attempt to receive 4096 bytes of data
-        data_p = sock_v.recv(4096)
-        # If the received data is empty, there is nothing left to receive
-        if not data_p:
-            break
-        # Add the received data to the buffer
-        data += data_p
-    num_chunks = int(data[:data.index(b':')].decode())
-    data = data[data.index(b':'):]
-
-    # Divide the encrypted message into chunks
-    encrypted_chunks = [data[i:i + CHUNK_SIZE]
-                        for i in range(0, len(data), CHUNK_SIZE)]
-
-    # Decrypt each chunk
-    decrypted_chunks = []
-    for chunk in encrypted_chunks:
-        decrypted_chunks.append(
-            key.decrypt( # not correct lenght error!!
-                chunk,
-                padding.PKCS1v15()
-            )
-        )
-
-    # Concatenate the decrypted chunks
-    return (b''.join(decrypted_chunks))
-
+        data = connectSocket.recv(4096)
+        print("received", data.decode())
 
 def connectF(friendip_s: str):
     t = Thread(target=lambda: connectF_t(friendip_s))
@@ -77,19 +27,32 @@ def connectF(friendip_s: str):
 
 
 def connectF_t(friendip_s: str):
-    mySocket.connect((friendip_s, PORT))
+    # this will be the actual aes key
+    global fernet
+
+    # connect to friend
+    connectSocket.connect((friendip_s, PORT))
     print("connected!")
-    mySocket.sendall(public_key_b)
 
-    otherPublic_b: bytes = receive_decrypt_reassemble_output(
-        private_key, mySocket)
+    # send serialized public key
+    connectSocket.sendall(public_key_b)
 
-    otherPublic: rsa.RSAPublicKey = serialization.load_pem_public_key(
-        otherPublic_b)  # type:ignore
-
+    # receive symmetric key and decrypt it
+    serverKey_enc = connectSocket.recv(4096)
+    serverKey = private_key.decrypt(
+        serverKey_enc,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    fernet = Fernet(serverKey)
     print("keys exchanged!")
-    print(public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo),
-          otherPublic.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo))
+    t = Thread(target=recv_message)
+    t.daemon = True
+    t.start()
+
 
 
 window = tk.Tk()
@@ -106,9 +69,8 @@ private_key = rsa.generate_private_key(
 public_key = private_key.public_key()
 public_key_b: bytes = public_key.public_bytes(
     serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
-otherPublic = rsa.RSAPublicKey
 
-mySocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+connectSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 # get the screen dimension
 screen_width = window.winfo_screenwidth()
@@ -148,7 +110,7 @@ connect = tk.Button(
 )
 
 
-friend.pack(side="left")
-connect.pack(side="left")
+friend.pack(side='left')
+connect.pack(side='left')
 frame1.pack()
 window.mainloop()
