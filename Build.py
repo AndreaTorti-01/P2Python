@@ -2,13 +2,18 @@ import PyInstaller.__main__
 import os
 import shutil
 from pathlib import Path
+import platform
 
 PyInstaller.__main__.run([
     'Client.py',
     '--onefile',
     '--noconsole'
 ])
-shutil.move(Path("dist/Client.exe"), "Client.exe")
+
+if (platform.system() == "Windows"):
+    shutil.move(Path("dist/Client.exe"), "Client.exe")
+else:
+    shutil.move(Path("dist/Client"), "Client")
 os.remove("Client.spec")
 
 try:
@@ -28,7 +33,10 @@ PyInstaller.__main__.run([
     '--onefile',
     '--noconsole'
 ])
-shutil.move(Path("dist/Server.exe"), "Server.exe")
+if(platform.system() == "Windows"):
+    shutil.move(Path("dist/Server.exe"), "Server.exe")
+else:
+    shutil.move(Path("dist/Server"), "Server")
 os.remove("Server.spec")
 
 try:
